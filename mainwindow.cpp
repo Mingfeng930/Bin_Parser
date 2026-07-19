@@ -501,6 +501,27 @@ bool MainWindow::sendBothSubPackets(int packetIndex, const QByteArray &bigPacket
         log(QString::fromUtf8("  子包2: 数据为空，跳过"));
     }
 
+    // 发包完成后发送查询命令 01 03 51 01 00 + CRC16
+    {
+        QByteArray queryCmd;
+        queryCmd.append(static_cast<char>(0x01));
+        queryCmd.append(static_cast<char>(0x03));
+        queryCmd.append(static_cast<char>(0x51));
+        queryCmd.append(static_cast<char>(0x01));
+        queryCmd.append(static_cast<char>(0x00));
+        quint16 queryCRC = calculateCRC16(queryCmd);
+        appendU16LE(queryCmd, queryCRC);
+        log(QString::fromUtf8("  [查询命令] %1").arg(QString(queryCmd.toHex(' ').toUpper())));
+        m_serialPort->write(queryCmd);
+    }
+    {
+        QByteArray resp = waitForResponse(500);
+        if (!resp.isEmpty())
+            log(QString::fromUtf8("  [查询返回] %1").arg(QString(resp.toHex(' ').toUpper())));
+        else
+            log(QString::fromUtf8("  [查询返回] 无应答"));
+    }
+
     return true;
 }
 
