@@ -9,6 +9,9 @@
 #include <QSerialPort>
 #include <QSerialPortInfo>
 #include <QSpinBox>
+#include <QPushButton>
+#include <QSettings>
+#include <QCloseEvent>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -22,6 +25,9 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void onSelectFile();
     void onUnpack();
@@ -31,6 +37,8 @@ private slots:
     void onRefreshSerial();
     void onConnectSerial();
     void onSerialReadyRead();
+    void onStopSend();
+    void onResetSend();
 
 private:
     void log(const QString &msg);
@@ -43,6 +51,8 @@ private:
     bool sendDataPacket(bool isFirstSubPacket, int subIndex, quint32 packetSeq, const QByteArray &data, quint32 taskID, quint16 totalPacketSize);
     bool sendBothSubPackets(int packetIndex, const QByteArray &bigPacket);
     QByteArray waitForResponse(int timeoutMs);
+    void loadSettings();
+    void saveSettings();
 
     Ui::MainWindow *ui;
     QByteArray m_rxBuffer;
@@ -55,11 +65,15 @@ private:
     QSerialPort *m_serialPort;
     bool m_serialConnected;
 
-    // 两种延时控件
-    QSpinBox *m_spinInterPacketDelay;    // 包与包之间的延时
+    QSpinBox *m_spinInterPacketDelay;
     int m_interPacketDelayMs;
-    QSpinBox *m_spinSubPacketDelay;      // 子包与子包之间的延时
+    QSpinBox *m_spinSubPacketDelay;
     int m_subPacketDelayMs;
+
+    bool m_stopRequested;
+    QPushButton *m_btnStopSend;
+    QPushButton *m_btnReset;
+    bool m_sendingInProgress;
 };
 
 #endif // MAINWINDOW_H
