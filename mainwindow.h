@@ -69,6 +69,8 @@ private:
     int m_interPacketDelayMs;
     QSpinBox *m_spinSubPacketDelay;
     int m_subPacketDelayMs;
+    QSpinBox *m_spinQueryTimeout;
+    int m_queryTimeoutMs;
 
     bool m_stopRequested;
     QPushButton *m_btnStopSend;

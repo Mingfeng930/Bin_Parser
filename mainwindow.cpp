@@ -26,6 +26,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_serialConnected(false)
     , m_interPacketDelayMs(100)
     , m_subPacketDelayMs(100)
+    , m_queryTimeoutMs(500)
     , m_stopRequested(false)
 {
     ui->setupUi(this);
@@ -68,6 +69,16 @@ MainWindow::MainWindow(QWidget *parent)
         m_subPacketDelayMs = val;
     });
 
+    // 添加查询超时 SpinBox
+    QLabel *labelQueryTimeout = new QLabel(QString::fromUtf8("查询超时(ms):"), this);
+    m_spinQueryTimeout = new QSpinBox(this);
+    m_spinQueryTimeout->setRange(0, 10000);
+    m_spinQueryTimeout->setValue(500);
+    m_spinQueryTimeout->setSuffix(" ms");
+    connect(m_spinQueryTimeout, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int val) {
+        m_queryTimeoutMs = val;
+    });
+
     // 添加停止发送按钮
     m_btnStopSend = new QPushButton(QString::fromUtf8("停止发送"), this);
     connect(m_btnStopSend, &QPushButton::clicked, this, &MainWindow::onStopSend);
@@ -81,6 +92,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->actionLayout->addWidget(m_spinInterPacketDelay);
     ui->actionLayout->addWidget(labelSubPktDelay);
     ui->actionLayout->addWidget(m_spinSubPacketDelay);
+    ui->actionLayout->addWidget(labelQueryTimeout);
+    ui->actionLayout->addWidget(m_spinQueryTimeout);
     ui->actionLayout->addWidget(m_btnStopSend);
     ui->actionLayout->addWidget(m_btnReset);
 
@@ -123,6 +136,8 @@ void MainWindow::loadSettings()
         m_spinInterPacketDelay->setValue(settings.value("config/interPacketDelay").toInt());
     if (settings.contains("config/subPacketDelay"))
         m_spinSubPacketDelay->setValue(settings.value("config/subPacketDelay").toInt());
+    if (settings.contains("config/queryTimeout"))
+        m_spinQueryTimeout->setValue(settings.value("config/queryTimeout").toInt());
 }
 
 void MainWindow::saveSettings()
@@ -135,6 +150,7 @@ void MainWindow::saveSettings()
     settings.setValue("config/version", ui->editVersion->text());
     settings.setValue("config/interPacketDelay", m_spinInterPacketDelay->value());
     settings.setValue("config/subPacketDelay", m_spinSubPacketDelay->value());
+    settings.setValue("config/queryTimeout", m_spinQueryTimeout->value());
 }
 
 void MainWindow::onStopSend()
@@ -533,9 +549,9 @@ bool MainWindow::sendBothSubPackets(int packetIndex, const QByteArray &bigPacket
         m_serialPort->write(queryCmd);
     }
     {
-        QByteArray resp = waitForResponse(500);
+        QByteArray resp = waitForResponse(m_queryTimeoutMs);
         if (resp.isEmpty()) {
-            log(QString::fromUtf8("  [查询返回] 无应答，停止发送"));
+            log(QString::fromUtf8("  [查询返回] 无应答 (超时%1ms)，停止发送").arg(m_queryTimeoutMs));
             return false;
         }
         log(QString::fromUtf8("  [查询返回] %1").arg(QString(resp.toHex(' ').toUpper())));
@@ -631,13 +647,16 @@ void MainWindow::onSendBatch()
     QThread::msleep(1000);
     log(QString::fromUtf8("开始一次性发送，总固件包数: %1").arg(m_packets.size()));
 
-    for (int i = 0; i < m_packets.size(); ++i) {
+    int i;
+    for (i = 0; i < m_packets.size(); ++i) {
         if (m_stopRequested) {
             log(QString::fromUtf8("发送已被用户中断"));
             break;
         }
-        if (!sendBothSubPackets(i, m_packets[i]))
+        if (!sendBothSubPackets(i, m_packets[i])) {
+            log(QString::fromUtf8("固件包 %1/%2 发送失败，批量发送中断").arg(i + 1).arg(m_packets.size()));
             break;
+        }
 
         if (i < m_packets.size() - 1 && m_interPacketDelayMs > 0) {
             log(QString::fromUtf8("  包间延时 %1 ms...").arg(m_interPacketDelayMs));
@@ -645,7 +664,7 @@ void MainWindow::onSendBatch()
         }
     }
 
-    if (!m_stopRequested)
+    if (!m_stopRequested && i >= m_packets.size())
         log(QString::fromUtf8("所有 %1 个固件包已一次性发送完毕").arg(m_packets.size()));
     log(QString::fromUtf8("========== 一次性发送流程结束 =========="));
     m_btnStopSend->setEnabled(false);
