@@ -534,10 +534,20 @@ bool MainWindow::sendBothSubPackets(int packetIndex, const QByteArray &bigPacket
     }
     {
         QByteArray resp = waitForResponse(500);
-        if (!resp.isEmpty())
-            log(QString::fromUtf8("  [查询返回] %1").arg(QString(resp.toHex(' ').toUpper())));
-        else
-            log(QString::fromUtf8("  [查询返回] 无应答"));
+        if (resp.isEmpty()) {
+            log(QString::fromUtf8("  [查询返回] 无应答，停止发送"));
+            return false;
+        }
+        log(QString::fromUtf8("  [查询返回] %1").arg(QString(resp.toHex(' ').toUpper())));
+
+        // 验证查询应答: 期望收到 03 51 01 01 A5 (不含可变地址头)
+        const char expected[] = { 0x03, 0x51, 0x01, 0x01, (char)0xA5 };
+        if (!resp.contains(QByteArray(expected, 5))) {
+            log(QString::fromUtf8("  查询应答验证失败: 未匹配 03 51 01 01 A5，停止发送"));
+            return false;
+        }
+
+        log(QString::fromUtf8("  查询应答验证通过 (03 51 01 01 A5)"));
     }
 
     return true;
